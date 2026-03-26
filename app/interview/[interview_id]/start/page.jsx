@@ -293,21 +293,29 @@ ${questions}`
         body: formData,
       })
 
+      const data = await res.json()
+
       if (res.ok) {
-        const data = await res.json()
         if (data.text?.trim()) {
           console.log('[STT] Result:', data.text)
           await handleUserResponse(data.text)
         } else {
+          console.warn('[STT] Empty transcript returned')
           startListening()
         }
       } else {
-        throw new Error('STT failed')
+        const errMsg = data.details || data.error || `Error ${res.status}`
+        console.error('[STT] Failed:', errMsg)
+        throw new Error(errMsg)
       }
     } catch (e) {
-      console.error('STT Error:', e)
-      setStatusMsg('Error processing voice. Retrying...')
-      setTimeout(() => startListening(), 2000)
+      console.error('STT Error details:', e)
+      setStatusMsg(`Voice Error: ${e.message.includes('401') ? 'API Key Invalid' : 'Processing failed'}. Retrying...`)
+      setTimeout(() => {
+        if (callActiveRef.current && !isProcessingRef.current && !isSpeaking) {
+          startListening()
+        }
+      }, 2500)
     }
   }
 

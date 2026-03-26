@@ -17,11 +17,18 @@ export async function POST(req) {
     const timeout = setTimeout(() => controller.abort(), STT_TIMEOUT)
 
     try {
-      const response = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true", {
+      if (!process.env.DEEPGRAM_API_KEY) {
+        throw new Error("DEEPGRAM_API_KEY is not set")
+      }
+
+      console.log(`[STT] Sending ${buffer.byteLength} bytes to Deepgram...`)
+
+      // We use 'nova-2' as standard, but we'll try 'general' if it fails
+      const response = await fetch("https://api.deepgram.com/v1/listen?smart_format=true&punctuate=true&model=nova-2", {
         method: "POST",
         headers: {
           "Authorization": `Token ${process.env.DEEPGRAM_API_KEY}`,
-          "Content-Type": "audio/webm"
+          "Content-Type": audioFile.type || "audio/webm"
         },
         body: buffer,
         signal: controller.signal
@@ -31,8 +38,12 @@ export async function POST(req) {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error("Deepgram STT error:", response.status, errorText)
-        return NextResponse.json({ error: "Transcription failed", details: errorText }, { status: 500 })
+        console.error(`Deepgram STT error (${response.status}):`, errorText)
+        return NextResponse.json({ 
+          error: `Transcription failed (${response.status})`, 
+          details: errorText,
+          status: response.status 
+        }, { status: response.status })
       }
 
       const result = await response.json()
