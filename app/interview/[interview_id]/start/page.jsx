@@ -49,6 +49,8 @@ export default function StartInterview() {
   const [transcript, setTranscript] = useState([])
   const [manualInput, setManualInput] = useState('')
   const [showManualInput, setShowManualInput] = useState(false)
+  const [technicalMode, setTechnicalMode] = useState(false)
+  const [codeSnippet, setCodeSnippet] = useState('-- Write your SQL or Code here\n\n')
 
   // Keep interviewInfo ref updated
   useEffect(() => {
@@ -360,6 +362,17 @@ ${questions}`
       const data = await res.json()
       const aiMessage = data.message || 'I see. Let\'s move to the next question.'
 
+      // Detect technical mode from AI message
+      const techKeywords = ['write', 'code', 'query', 'sql', 'function', 'implementation', 'script']
+      const isTech = techKeywords.some(k => aiMessage.toLowerCase().includes(k))
+      if (isTech) {
+        setTechnicalMode(true)
+        if (aiMessage.toLowerCase().includes('sql')) setCodeSnippet('-- SQL Query:\n\n')
+        else setCodeSnippet('// Write your code here\n\n')
+      } else {
+        setTechnicalMode(false)
+      }
+
       // Increment tracker if the AI didn't end yet (rough estimate)
       questionIndexRef.current += 1
 
@@ -385,7 +398,11 @@ ${questions}`
       }
 
       isProcessingRef.current = false
-      startListening()
+      if (!isTech) {
+        startListening()
+      } else {
+        setStatusMsg('Technical task: Use the editor on the right.')
+      }
 
     } catch (err) {
       console.error('[AI] Error:', err)
@@ -400,6 +417,13 @@ ${questions}`
     if (!manualInput.trim() || isProcessingRef.current) return
     stopListening()
     handleUserResponse(manualInput)
+  }
+
+  const handleCodeSubmit = () => {
+    if (!codeSnippet.trim() || isProcessingRef.current) return
+    stopListening()
+    handleUserResponse(`[Code Submission]:\n${codeSnippet}`)
+    setTechnicalMode(false)
   }
 
   // ── Life Cycle ───────────────────────────────────────────────────────────
@@ -555,232 +579,277 @@ ${questions}`
   }, [])
 
   return (
-    <div className='p-6 lg:px-40 xl:px-50 min-h-screen bg-gray-50/50'>
+    <div className='p-6 lg:px-20 xl:px-30 min-h-screen bg-gray-50/50'>
 
-      <div className='max-w-4xl mx-auto'>
-        <h2 className='font-bold text-2xl flex justify-between items-center text-gray-800'>
-          {callStatus === 'checking' ? 'System Readiness' : 'Interview Session'}
-          {callStatus !== 'checking' && (
-            <span className='flex gap-2 items-center text-gray-500 text-lg font-mono bg-white px-4 py-1 rounded-full shadow-sm border'>
-              <Timer className='h-5 w-5 text-primary' />
-              {formatTime(elapsed)}
-            </span>
-          )}
-        </h2>
+      <div className={`${technicalMode ? 'grid grid-cols-1 lg:grid-cols-2 gap-10' : 'max-w-4xl mx-auto'}`}>
 
-        {callStatus === 'checking' ? (
-          <div className="mt-10">
-            <HardwareCheck 
-              userName={interviewInfo?.userName} 
-              onComplete={() => setCallStatus('idle')} 
-            />
-          </div>
-        ) : (
-          <>
-            {/* Current message visualization */}
-            <div className='mt-8 mb-4 min-h-[120px] flex flex-col items-center justify-center text-center px-4'>
-           {isSpeaking ? (
-             <div className='animate-in fade-in zoom-in duration-300'>
-                <p className='text-primary font-medium mb-2 flex items-center justify-center gap-2'>
-                  <Loader2 className='h-4 w-4 animate-spin' /> AI Recruiter is speaking
-                </p>
-                <p className='text-xl text-gray-700 italic max-w-2xl font-medium'>"{currentMessage}"</p>
-             </div>
-           ) : isRecording ? (
-             <div className='animate-pulse flex flex-col items-center'>
-                <p className='text-green-600 font-bold mb-4 uppercase tracking-widest text-sm'>Listening to you...</p>
-                <div className='flex gap-1.5 justify-center items-end h-10'>
-                  {[1,2,3,4,5,6,7,8].map(i => (
-                    <div key={i} className='w-1.5 bg-green-500 rounded-full animate-bounce' 
-                      style={{ height: `${Math.random() * 30 + 10}px`, animationDelay: `${i * 0.1}s` }} />
-                  ))}
-                </div>
-             </div>
-           ) : isProcessingRef.current ? (
-             <div className='flex flex-col items-center gap-3'>
-               <Loader2 className='h-10 w-10 animate-spin text-primary' />
-               <p className='text-gray-600 font-medium'>Analyzing your response...</p>
-             </div>
-           ) : callStatus === 'active' ? (
-             <div className='flex flex-col items-center gap-2'>
-               <p className='text-gray-400 font-medium'>Waiting for your answer</p>
-               <Button variant="ghost" size="sm" onClick={() => setShowManualInput(!showManualInput)} className="text-xs text-primary">
-                 {showManualInput ? "Hide manual input" : "I prefer to type my answer"}
-               </Button>
-             </div>
-           ) : null}
-        </div>
+        {/* Left Side: Interview Session */}
+        <div className="flex flex-col">
+          <h2 className='font-bold text-2xl flex justify-between items-center text-gray-800'>
+            {callStatus === 'checking' ? 'System Readiness' : 'Interview Session'}
+            {callStatus !== 'checking' && (
+              <span className='flex gap-2 items-center text-gray-500 text-lg font-mono bg-white px-4 py-1 rounded-full shadow-sm border'>
+                <Timer className='h-5 w-5 text-primary' />
+                {formatTime(elapsed)}
+              </span>
+            )}
+          </h2>
 
-        <div className='grid grid-cols-1 md:grid-cols-2 gap-8 mt-5'>
-
-          {/* AI Recruiter */}
-          <div className={`bg-white p-8 rounded-3xl border-2 transition-all duration-500 flex flex-col gap-4 items-center justify-center
-            ${isSpeaking ? 'border-primary shadow-2xl scale-105' : 'border-gray-100 shadow-md'}`}>
-            <div className='relative'>
-              <div className={`absolute -inset-4 rounded-full bg-primary/10 animate-pulse ${isSpeaking ? 'block' : 'hidden'}`} />
-              <div className='w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center border-4 border-white shadow-inner'>
-                <Image src='/interview.png' alt='AI' width={60} height={60} className='rounded-full' />
-              </div>
-              {isSpeaking && (
-                <span className='absolute bottom-1 right-1 w-6 h-6 bg-primary rounded-full border-4 border-white flex items-center justify-center'>
-                  <span className='w-2 h-2 bg-white rounded-full animate-ping' />
-                </span>
-              )}
-            </div>
-            <div className='text-center'>
-              <h2 className='font-bold text-xl text-gray-800'>AI Recruiter</h2>
-              <p className='text-sm text-gray-500'>HR Specialist</p>
-            </div>
-            <span className={`text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full ${
-              isSpeaking ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-400'
-            }`}>
-              {isSpeaking ? 'Speaking' : 'Waiting'}
-            </span>
-          </div>
-
-          {/* Candidate */}
-          <div className={`bg-white p-8 rounded-3xl border-2 transition-all duration-500 flex flex-col gap-4 items-center justify-center
-            ${isRecording ? 'border-green-500 shadow-2xl scale-105' : 'border-gray-100 shadow-md'}`}>
-            <div className='relative'>
-              <div className={`absolute -inset-4 rounded-full bg-green-500/10 animate-pulse ${isRecording ? 'block' : 'hidden'}`} />
-              <div className='w-24 h-24 bg-gradient-to-br from-primary to-blue-600 text-white rounded-full flex items-center justify-center text-3xl font-bold border-4 border-white shadow-lg'>
-                {interviewInfo?.userName?.[0]?.toUpperCase() ?? 'C'}
-              </div>
-              {isRecording && (
-                <span className='absolute bottom-1 right-1 w-6 h-6 bg-green-500 rounded-full border-4 border-white flex items-center justify-center'>
-                  <Mic className='h-3 w-3 text-white' />
-                </span>
-              )}
-            </div>
-            <div className='text-center'>
-              <h2 className='font-bold text-xl text-gray-800'>{interviewInfo?.userName || 'Candidate'}</h2>
-              <p className='text-sm text-gray-500'>Interviewee</p>
-            </div>
-            <span className={`text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full ${
-              isRecording ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 
-              callStatus === 'active' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-400'
-            }`}>
-              {isRecording ? 'Listening' : callStatus === 'active' ? 'Your Turn' : 'Standby'}
-            </span>
-          </div>
-        </div>
-
-        {/* Manual Input Fallback */}
-        {callStatus === 'active' && showManualInput && (
-          <div className='mt-8 animate-in slide-in-from-top-4 duration-300'>
-            <form onSubmit={handleManualSubmit} className='bg-white p-4 rounded-2xl border border-primary/20 shadow-lg flex gap-2'>
-              <Textarea 
-                value={manualInput}
-                onChange={(e) => setManualInput(e.target.value)}
-                placeholder="Type your answer here if voice isn't working..."
-                className="flex-1 min-h-[80px] resize-none border-none focus-visible:ring-0 text-base"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleManualSubmit()
-                  }
-                }}
+          {callStatus === 'checking' ? (
+            <div className="mt-10">
+              <HardwareCheck 
+                userName={interviewInfo?.userName} 
+                onComplete={() => setCallStatus('idle')} 
               />
-              <Button type="submit" size="icon" className="h-12 w-12 rounded-xl self-end" disabled={!manualInput.trim() || isProcessingRef.current}>
-                <Send className="h-5 w-5" />
-              </Button>
-            </form>
-          </div>
-        )}
-
-        {/* Controls */}
-        <div className='flex flex-col items-center mt-12 gap-6'>
-          
-          <p className='text-sm text-gray-500 font-medium bg-gray-100 px-6 py-2 rounded-full border border-gray-200'>
-            {statusMsg}
-          </p>
-
-          {callStatus === 'idle' && (
-            <Button onClick={startInterview} size='lg' className='px-12 py-8 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20 hover:scale-105 transition-transform'>
-              <Phone className='h-6 w-6 mr-3' />
-              Start My Interview
-            </Button>
-          )}
-
-          {callStatus === 'active' && (
-            <div className='flex items-center gap-6'>
-              <button 
-                onClick={toggleMute}
-                className={`p-5 rounded-full shadow-lg transition-all ${
-                  isMuted 
-                    ? 'bg-yellow-500 text-white ring-4 ring-yellow-500/20' 
-                    : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                }`}
-                title={isMuted ? 'Unmute' : 'Mute'}
-              >
-                {isMuted ? <MicOff className='h-8 w-8' /> : <Mic className='h-8 w-8' />}
-              </button>
-
-              <AlertConfirmation onConfirm={endInterview}>
-                <button className='p-6 bg-red-500 text-white rounded-full shadow-xl shadow-red-500/30 hover:bg-red-600 hover:scale-110 transition-all'>
-                  <Phone className='h-10 w-10 rotate-[135deg]' />
-                </button>
-              </AlertConfirmation>
-
-              {isRecording && (
-                <Button onClick={stopListening} variant="outline" className="rounded-full h-14 px-6 border-2 border-green-500 text-green-600 font-bold hover:bg-green-50">
-                   Done Speaking
-                </Button>
-              )}
-              
-              {!isRecording && !isProcessingRef.current && !isSpeaking && (
-                <Button onClick={startListening} className="rounded-full h-14 px-8 font-bold">
-                   <Mic className="mr-2 h-5 w-5" /> Speak Now
-                </Button>
-              )}
             </div>
-          )}
-
-          {callStatus === 'ended' && (
-            <div className='flex flex-col items-center gap-4 bg-white p-8 rounded-3xl border border-gray-100 shadow-xl w-full max-w-md'>
-              <h3 className='font-bold text-xl text-gray-800'>Interview Ended</h3>
-              {savingReport ? (
-                <div className='flex flex-col items-center gap-4'>
-                   <div className='relative'>
-                      <div className='h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin' />
-                   </div>
-                   <p className='text-gray-600 animate-pulse font-medium'>Analyzing your performance...</p>
-                </div>
-              ) : (
-                <>
-                  {reportReady ? (
-                    <div className='text-center space-y-4'>
-                      <div className='w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-2'>
-                        <FileText className='h-8 w-8' />
+          ) : (
+            <>
+              {/* Current message visualization */}
+              <div className='mt-8 mb-4 min-h-[120px] flex flex-col items-center justify-center text-center px-4'>
+                {isSpeaking ? (
+                  <div className='animate-in fade-in zoom-in duration-300'>
+                      <p className='text-primary font-medium mb-2 flex items-center justify-center gap-2'>
+                        <Loader2 className='h-4 w-4 animate-spin' /> AI Recruiter is speaking
+                      </p>
+                      <p className='text-xl text-gray-700 italic max-w-2xl font-medium'>"{currentMessage}"</p>
+                  </div>
+                ) : isRecording ? (
+                  <div className='animate-pulse flex flex-col items-center'>
+                      <p className='text-green-600 font-bold mb-4 uppercase tracking-widest text-sm'>Listening to you...</p>
+                      <div className='flex gap-1.5 justify-center items-end h-10'>
+                        {[1,2,3,4,5,6,7,8].map(i => (
+                          <div key={i} className='w-1.5 bg-green-500 rounded-full animate-bounce' 
+                            style={{ height: `${Math.random() * 30 + 10}px`, animationDelay: `${i * 0.1}s` }} />
+                        ))}
                       </div>
-                      <p className='text-green-600 font-semibold'>Evaluation is ready!</p>
-                      <Button onClick={() => router.push('/dashboard/interview-feedbacks')} className='w-full py-6 rounded-xl font-bold'>
-                        View Results & Feedback
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button onClick={() => router.push('/dashboard')} variant='outline' className='w-full'>
-                      Back to Dashboard
+                  </div>
+                ) : isProcessingRef.current ? (
+                  <div className='flex flex-col items-center gap-3'>
+                    <Loader2 className='h-10 w-10 animate-spin text-primary' />
+                    <p className='text-gray-600 font-medium'>Analyzing your response...</p>
+                  </div>
+                ) : callStatus === 'active' ? (
+                  <div className='flex flex-col items-center gap-2'>
+                    <p className='text-gray-400 font-medium'>Waiting for your answer</p>
+                    <Button variant="ghost" size="sm" onClick={() => setShowManualInput(!showManualInput)} className="text-xs text-primary">
+                      {showManualInput ? "Hide manual input" : "I prefer to type my answer"}
                     </Button>
-                  )}
-                </>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className={`grid grid-cols-1 ${technicalMode ? '' : 'md:grid-cols-2'} gap-8 mt-5`}>
+
+                {/* AI Recruiter */}
+                <div className={`bg-white p-8 rounded-3xl border-2 transition-all duration-500 flex flex-col gap-4 items-center justify-center
+                  ${isSpeaking ? 'border-primary shadow-2xl scale-105' : 'border-gray-100 shadow-md'}`}>
+                  <div className='relative'>
+                    <div className={`absolute -inset-4 rounded-full bg-primary/10 animate-pulse ${isSpeaking ? 'block' : 'hidden'}`} />
+                    <div className='w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center border-4 border-white shadow-inner'>
+                      <Image src='/interview.png' alt='AI' width={60} height={60} className='rounded-full' />
+                    </div>
+                    {isSpeaking && (
+                      <span className='absolute bottom-1 right-1 w-6 h-6 bg-primary rounded-full border-4 border-white flex items-center justify-center'>
+                        <span className='w-2 h-2 bg-white rounded-full animate-ping' />
+                      </span>
+                    )}
+                  </div>
+                  <div className='text-center'>
+                    <h2 className='font-bold text-xl text-gray-800'>AI Recruiter</h2>
+                    <p className='text-sm text-gray-500'>HR Specialist</p>
+                  </div>
+                  <span className={`text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full ${
+                    isSpeaking ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {isSpeaking ? 'Speaking' : 'Waiting'}
+                  </span>
+                </div>
+
+                {/* Candidate */}
+                {!technicalMode && (
+                  <div className={`bg-white p-8 rounded-3xl border-2 transition-all duration-500 flex flex-col gap-4 items-center justify-center
+                    ${isRecording ? 'border-green-500 shadow-2xl scale-105' : 'border-gray-100 shadow-md'}`}>
+                    <div className='relative'>
+                      <div className={`absolute -inset-4 rounded-full bg-green-500/10 animate-pulse ${isRecording ? 'block' : 'hidden'}`} />
+                      <div className='w-24 h-24 bg-gradient-to-br from-primary to-blue-600 text-white rounded-full flex items-center justify-center text-3xl font-bold border-4 border-white shadow-lg'>
+                        {interviewInfo?.userName?.[0]?.toUpperCase() ?? 'C'}
+                      </div>
+                      {isRecording && (
+                        <span className='absolute bottom-1 right-1 w-6 h-6 bg-green-500 rounded-full border-4 border-white flex items-center justify-center'>
+                          <Mic className='h-3 w-3 text-white' />
+                        </span>
+                      )}
+                    </div>
+                    <div className='text-center'>
+                      <h2 className='font-bold text-xl text-gray-800'>{interviewInfo?.userName || 'Candidate'}</h2>
+                      <p className='text-sm text-gray-500'>Interviewee</p>
+                    </div>
+                    <span className={`text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full ${
+                      isRecording ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 
+                      callStatus === 'active' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      {isRecording ? 'Listening' : callStatus === 'active' ? 'Your Turn' : 'Standby'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Manual Input Fallback */}
+              {callStatus === 'active' && showManualInput && !technicalMode && (
+                <div className='mt-8 animate-in slide-in-from-top-4 duration-300'>
+                  <form onSubmit={handleManualSubmit} className='bg-white p-4 rounded-2xl border border-primary/20 shadow-lg flex gap-2'>
+                    <Textarea 
+                      value={manualInput}
+                      onChange={(e) => setManualInput(e.target.value)}
+                      placeholder="Type your answer here if voice isn't working..."
+                      className="flex-1 min-h-[80px] resize-none border-none focus-visible:ring-0 text-base"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleManualSubmit()
+                        }
+                      }}
+                    />
+                    <Button type="submit" size="icon" className="h-12 w-12 rounded-xl self-end" disabled={!manualInput.trim() || isProcessingRef.current}>
+                      <Send className="h-5 w-5" />
+                    </Button>
+                  </form>
+                </div>
               )}
-            </div>
+
+              {/* Controls */}
+              <div className='flex flex-col items-center mt-12 gap-6'>
+
+                <p className='text-sm text-gray-500 font-medium bg-gray-100 px-6 py-2 rounded-full border border-gray-200 text-center max-w-sm'>
+                  {statusMsg}
+                </p>
+
+                {callStatus === 'idle' && (
+                  <Button onClick={startInterview} size='lg' className='px-12 py-8 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20 hover:scale-105 transition-transform'>
+                    <Phone className='h-6 w-6 mr-3' />
+                    Start My Interview
+                  </Button>
+                )}
+
+                {callStatus === 'active' && (
+                  <div className='flex items-center gap-6'>
+                    {!technicalMode && (
+                      <>
+                        <button 
+                          onClick={toggleMute}
+                          className={`p-5 rounded-full shadow-lg transition-all ${
+                            isMuted 
+                              ? 'bg-yellow-500 text-white ring-4 ring-yellow-500/20' 
+                              : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                          }`}
+                          title={isMuted ? 'Unmute' : 'Mute'}
+                        >
+                          {isMuted ? <MicOff className='h-8 w-8' /> : <Mic className='h-8 w-8' />}
+                        </button>
+
+                        {isRecording && (
+                          <Button onClick={stopListening} variant="outline" className="rounded-full h-14 px-6 border-2 border-green-500 text-green-600 font-bold hover:bg-green-50">
+                            Done Speaking
+                          </Button>
+                        )}
+
+                        {!isRecording && !isProcessingRef.current && !isSpeaking && (
+                          <Button onClick={startListening} className="rounded-full h-14 px-8 font-bold">
+                            <Mic className="mr-2 h-5 w-5" /> Speak Now
+                          </Button>
+                        )}
+                      </>
+                    )}
+
+                    <AlertConfirmation onConfirm={endInterview}>
+                      <button className='p-6 bg-red-500 text-white rounded-full shadow-xl shadow-red-500/30 hover:bg-red-600 hover:scale-110 transition-all'>
+                        <Phone className='h-10 w-10 rotate-[135deg]' />
+                      </button>
+                    </AlertConfirmation>
+                  </div>
+                )}
+
+                {callStatus === 'ended' && (
+                  <div className='flex flex-col items-center gap-4 bg-white p-8 rounded-3xl border border-gray-100 shadow-xl w-full max-w-md'>
+                    <h3 className='font-bold text-xl text-gray-800'>Interview Ended</h3>
+                    {savingReport ? (
+                      <div className='flex flex-col items-center gap-4'>
+                        <div className='relative'>
+                            <div className='h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin' />
+                        </div>
+                        <p className='text-gray-600 animate-pulse font-medium'>Analyzing your performance...</p>
+                      </div>
+                    ) : (
+                      <>
+                        {reportReady ? (
+                          <div className='text-center space-y-4'>
+                            <div className='w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-2'>
+                              <FileText className='h-8 w-8' />
+                            </div>
+                            <p className='text-green-600 font-semibold'>Evaluation is ready!</p>
+                            <Button onClick={() => router.push('/dashboard/interview-feedbacks')} className='w-full py-6 rounded-xl font-bold'>
+                              View Results & Feedback
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button onClick={() => router.push('/dashboard')} variant='outline' className='w-full'>
+                            Back to Dashboard
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {error && (
+                <div className='mt-8 p-6 bg-red-50 rounded-2xl border border-red-100 text-center animate-in slide-in-from-bottom-4 duration-500'>
+                  <p className='text-red-600 font-medium mb-4'>{error}</p>
+                  <Button onClick={() => window.location.reload()} variant='destructive' className='font-bold px-8'>
+                    Refresh Page
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {error && (
-          <div className='mt-8 p-6 bg-red-50 rounded-2xl border border-red-100 text-center animate-in slide-in-from-bottom-4 duration-500'>
-            <p className='text-red-600 font-medium mb-4'>{error}</p>
-            <Button onClick={() => window.location.reload()} variant='destructive' className='font-bold px-8'>
-              Refresh Page
-            </Button>
+        {/* Right Side: Technical Workspace */}
+        {technicalMode && callStatus === 'active' && (
+          <div className="flex flex-col h-full min-h-[500px] animate-in slide-in-from-right-10 duration-500">
+             <div className="bg-gray-800 rounded-3xl p-6 shadow-2xl flex-1 flex flex-col border-4 border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-500" />
+                      <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                      <div className="w-3 h-3 rounded-full bg-green-500" />
+                    </div>
+                    <span className="text-gray-400 text-xs font-mono ml-4">technical_workspace.sql</span>
+                  </div>
+                  <span className="text-primary text-[10px] font-bold uppercase tracking-widest">Editor Mode</span>
+                </div>
+
+                <Textarea 
+                  value={codeSnippet}
+                  onChange={(e) => setCodeSnippet(e.target.value)}
+                  className="flex-1 bg-gray-900 border-none text-green-400 font-mono text-sm p-4 resize-none focus-visible:ring-0 leading-relaxed shadow-inner rounded-xl"
+                  placeholder="Type your code here..."
+                />
+
+                <div className="mt-6 flex items-center justify-between">
+                   <p className="text-gray-500 text-xs italic">AI is waiting for your solution</p>
+                   <Button onClick={handleCodeSubmit} disabled={isProcessingRef.current} className="bg-primary hover:bg-primary/90 text-white font-bold px-8 py-6 rounded-xl shadow-lg shadow-primary/20">
+                      Submit Solution
+                   </Button>
+                </div>
+             </div>
           </div>
         )}
-          </>
-        )}
+
       </div>
 
     </div>
   )
-}
+  }
+
