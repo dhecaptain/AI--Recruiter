@@ -199,26 +199,47 @@ function ViewReportModal({ feedback, open, onClose }) {
           {/* ── Per-Question Breakdown ───────────────────────────────────── */}
           {questionScores.length > 0 && (
             <div>
-              <h4 className="font-semibold text-sm text-gray-700 mb-3">Question-by-Question Breakdown</h4>
-              <div className="space-y-2">
+              <h4 className="font-semibold text-sm text-gray-700 mb-3">Behavioral & Technical Analysis (STAR Method)</h4>
+              <div className="space-y-3">
                 {questionScores.map((q, i) => (
-                  <div key={i} className="p-3 border rounded-xl bg-gray-50">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-gray-800 flex-1">
+                  <div key={i} className="p-4 border rounded-2xl bg-white shadow-sm">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <p className="text-sm font-bold text-gray-800 flex-1 leading-snug">
                         Q{i + 1}. {q.question}
                       </p>
-                      <span className={`text-sm font-bold shrink-0 ${scoreTextColor(q.score)}`}>
-                        {q.score}/100
-                      </span>
+                      <div className="text-right">
+                        <span className={`text-sm font-black ${scoreTextColor(q.score)}`}>
+                          {q.score}%
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${scoreColor(q.score)}`}
-                        style={{ width: `${q.score}%` }}
-                      />
-                    </div>
+                    
+                    {/* STAR Breakdown */}
+                    {q.situation && (
+                      <div className="grid grid-cols-1 gap-2 mt-2">
+                        <div className="flex gap-2 text-xs">
+                          <span className="font-bold text-blue-600 w-16 shrink-0">Situation:</span>
+                          <span className="text-gray-600">{q.situation}</span>
+                        </div>
+                        <div className="flex gap-2 text-xs">
+                          <span className="font-bold text-purple-600 w-16 shrink-0">Task:</span>
+                          <span className="text-gray-600">{q.task}</span>
+                        </div>
+                        <div className="flex gap-2 text-xs">
+                          <span className="font-bold text-emerald-600 w-16 shrink-0">Action:</span>
+                          <span className="text-gray-600">{q.action}</span>
+                        </div>
+                        <div className="flex gap-2 text-xs">
+                          <span className="font-bold text-orange-600 w-16 shrink-0">Result:</span>
+                          <span className="text-gray-600">{q.result}</span>
+                        </div>
+                      </div>
+                    )}
+
                     {q.feedback && (
-                      <p className="text-xs text-gray-500 mt-1.5">{q.feedback}</p>
+                      <div className="mt-3 p-2 bg-gray-50 rounded-lg border border-dashed text-[11px] text-gray-500 italic">
+                        <strong>AI Insight:</strong> {q.feedback}
+                      </div>
                     )}
                   </div>
                 ))}

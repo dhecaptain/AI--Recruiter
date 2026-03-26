@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import { Textarea } from '@/components/ui/textarea'
+import HardwareCheck from './_components/HardwareCheck'
 
 export default function StartInterview() {
   const { interviewInfo } = useContext(InterviewDataContext)
@@ -35,7 +36,7 @@ export default function StartInterview() {
   const questionIndexRef = useRef(0)
 
   // ── UI State ──────────────────────────────────────────────────────────────
-  const [callStatus, setCallStatus] = useState('idle')
+  const [callStatus, setCallStatus] = useState('checking')
   const [isMuted, setIsMuted] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
@@ -550,15 +551,26 @@ ${questions}`
 
       <div className='max-w-4xl mx-auto'>
         <h2 className='font-bold text-2xl flex justify-between items-center text-gray-800'>
-          Interview Session
-          <span className='flex gap-2 items-center text-gray-500 text-lg font-mono bg-white px-4 py-1 rounded-full shadow-sm border'>
-            <Timer className='h-5 w-5 text-primary' />
-            {formatTime(elapsed)}
-          </span>
+          {callStatus === 'checking' ? 'System Readiness' : 'Interview Session'}
+          {callStatus !== 'checking' && (
+            <span className='flex gap-2 items-center text-gray-500 text-lg font-mono bg-white px-4 py-1 rounded-full shadow-sm border'>
+              <Timer className='h-5 w-5 text-primary' />
+              {formatTime(elapsed)}
+            </span>
+          )}
         </h2>
 
-        {/* Current message visualization */}
-        <div className='mt-8 mb-4 min-h-[120px] flex flex-col items-center justify-center text-center px-4'>
+        {callStatus === 'checking' ? (
+          <div className="mt-10">
+            <HardwareCheck 
+              userName={interviewInfo?.userName} 
+              onComplete={() => setCallStatus('idle')} 
+            />
+          </div>
+        ) : (
+          <>
+            {/* Current message visualization */}
+            <div className='mt-8 mb-4 min-h-[120px] flex flex-col items-center justify-center text-center px-4'>
            {isSpeaking ? (
              <div className='animate-in fade-in zoom-in duration-300'>
                 <p className='text-primary font-medium mb-2 flex items-center justify-center gap-2'>
@@ -756,6 +768,8 @@ ${questions}`
               Refresh Page
             </Button>
           </div>
+        )}
+          </>
         )}
       </div>
 

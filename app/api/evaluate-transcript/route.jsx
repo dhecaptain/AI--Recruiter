@@ -94,6 +94,18 @@ ${formattedQuestions}
 Interview Transcript:
 ${formattedTranscript}
 
+EVALUATION CRITERIA:
+1. STAR METHOD: For each candidate answer, evaluate if they provided:
+   - Situation: Context of the story
+   - Task: What needed to be done
+   - Action: Specifically what THEY did
+   - Result: The outcome
+2. SCORING (0-100):
+   - Communication: Clarity, pace, and tone.
+   - Technical Knowledge: Accuracy of answers.
+   - Confidence: Decisiveness and lack of fillers.
+   - Problem Solving: Logical approach to challenges.
+
 Return ONLY valid JSON with NO markdown, NO code fences, NO explanation:
 {
   "overall_score": <0-100>,
@@ -101,14 +113,27 @@ Return ONLY valid JSON with NO markdown, NO code fences, NO explanation:
   "technical_knowledge_score": <0-100>,
   "confidence_score": <0-100>,
   "problem_solving_score": <0-100>,
-  "recommendation": "Hire",
+  "recommendation": "Hire|Consider|Reject",
   "recommendation_reason": "<1-2 sentences>",
-  "detailed_feedback": "<3-4 paragraphs>",
+  "detailed_feedback": "<3-4 paragraphs covering behavioral and technical aspects>",
   "strengths": ["strength 1", "strength 2", "strength 3"],
   "improvements": ["area 1", "area 2", "area 3"],
-  "question_scores": [
-    { "question": "<text>", "score": <0-100>, "feedback": "<1-2 sentences>" }
-  ]
+  "star_analysis": [
+    { 
+      "question": "<text>", 
+      "score": <0-100>, 
+      "situation": "<summary>",
+      "task": "<summary>",
+      "action": "<summary>",
+      "result": "<summary>",
+      "feedback": "<1-2 sentences on how they could improve their STAR delivery>" 
+    }
+  ],
+  "behavioral_summary": {
+    "communication_notes": "<text>",
+    "confidence_notes": "<text>",
+    "problem_solving_notes": "<text>"
+  }
 }
 
 recommendation must be exactly: "Hire" (score>=75), "Consider" (50-74), or "Reject" (<50)`
@@ -159,12 +184,13 @@ recommendation must be exactly: "Hire" (score>=75), "Consider" (50-74), or "Reje
         overall_feedback:          evaluation.detailed_feedback,
         strengths:                 evaluation.strengths   ?? [],
         improvements:              evaluation.improvements ?? [],
-        question_scores:           evaluation.question_scores ?? [],
+        question_scores:           evaluation.star_analysis ?? evaluation.question_scores ?? [],
         category_scores: {
           "Technical Skills": evaluation.technical_knowledge_score,
           "Communication":    evaluation.communication_score,
           "Confidence":        evaluation.confidence_score,
           "Problem Solving":   evaluation.problem_solving_score,
+          "Behavioral Notes":  evaluation.behavioral_summary ?? {}
         },
         status:     'completed',
         email_sent: false,
