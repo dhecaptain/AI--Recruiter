@@ -504,9 +504,11 @@ ${questions}`
   const saveReport = async () => {
     setSavingReport(true)
     const info = interviewInfoRef.current
+    const questions = Array.isArray(info?.interviewData?.QuestionList) ? info.interviewData.QuestionList : []
+    const isCompleted = questionIndexRef.current >= questions.length
 
     try {
-      toast.loading('Saving responses...', { id: 'report' })
+      toast.loading(isCompleted ? 'Saving responses...' : 'Saving partial progress...', { id: 'report' })
 
       const transcriptRes = await fetch('/api/save-transcript', {
         method: 'POST',
@@ -520,6 +522,7 @@ ${questions}`
           duration: formatTime(elapsedRef.current),
           startedAt: startTimeRef.current,
           endedAt: new Date().toISOString(),
+          status: isCompleted ? 'completed' : 'early_exit'
         }),
       })
 
@@ -541,8 +544,9 @@ ${questions}`
           candidateEmail: info?.userEmail ?? null,
           jobPosition: info?.interviewData?.jobPosition,
           jobDescription: info?.interviewData?.jobDescription,
-          questionList: info?.interviewData?.QuestionList ?? [],
+          questionList: questions,
           interviewId: info?.interviewData?.interview_id,
+          isCompleted: isCompleted
         }),
       })
 

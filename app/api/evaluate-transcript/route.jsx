@@ -42,6 +42,7 @@ export async function POST(req) {
       jobDescription,
       questionList,
       interviewId,
+      isCompleted = true,
     } = await req.json();
 
     if (!transcript || transcript.length === 0) {
@@ -59,10 +60,10 @@ export async function POST(req) {
           technical_knowledge_score: 0,
           confidence_score: 0,
           problem_solving_score: 0,
-          recommendation: "Consider",
+          recommendation: "Reject",
           recommendation_reason: "No transcript was captured for this session.",
-          qualification_status: "pending",
-          detailed_feedback: "No transcript captured. The candidate may have had audio issues.",
+          qualification_status: "not_qualified",
+          detailed_feedback: "The interview was ended before any responses were captured.",
           overall_feedback: "No transcript captured.",
           strengths: [],
           improvements: [],
@@ -94,17 +95,17 @@ ${formattedQuestions}
 Interview Transcript:
 ${formattedTranscript}
 
+CONTEXT:
+The candidate ${isCompleted ? 'completed the full interview' : 'ended the interview early before all questions were finished'}.
+
 EVALUATION CRITERIA:
-1. STAR METHOD: For each candidate answer, evaluate if they provided:
-   - Situation: Context of the story
-   - Task: What needed to be done
-   - Action: Specifically what THEY did
-   - Result: The outcome
+1. STAR METHOD: For each candidate answer, evaluate if they provided Situation, Task, Action, and Result.
 2. SCORING (0-100):
    - Communication: Clarity, pace, and tone.
    - Technical Knowledge: Accuracy of answers.
    - Confidence: Decisiveness and lack of fillers.
    - Problem Solving: Logical approach to challenges.
+3. NOTE: If the interview was ended early, evaluate ONLY the questions that were answered. Do not penalize the score for missing questions, but note the early exit in the recommendation reason.
 
 Return ONLY valid JSON with NO markdown, NO code fences, NO explanation:
 {
@@ -126,7 +127,7 @@ Return ONLY valid JSON with NO markdown, NO code fences, NO explanation:
       "task": "<summary>",
       "action": "<summary>",
       "result": "<summary>",
-      "feedback": "<1-2 sentences on how they could improve their STAR delivery>" 
+      "feedback": "<1-2 sentences>" 
     }
   ],
   "behavioral_summary": {
@@ -147,21 +148,28 @@ recommendation must be exactly: "Hire" (score>=75), "Consider" (50-74), or "Reje
 
     let evaluation
     try {
+      // Improved JSON extraction
       const cleaned = aiContent.replace(/```json/g, '').replace(/```/g, '').trim()
-      const match = cleaned.match(/\{[\s\S]*\}/)
-      if (!match) throw new Error("No JSON found")
-      evaluation = JSON.parse(match[0])
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) throw new Error("No valid JSON structure found in AI response")
+      
+      evaluation = JSON.parse(jsonMatch[0])
     } catch (e) {
-      console.error("[Evaluate] JSON parse error:", e, "\nRaw:", aiContent)
-      return NextResponse.json({ error: "Invalid JSON from AI" }, { status: 500 })
+      console.error("[Evaluate] Parse error:", e, "\nAI Response was:", aiContent)
+      return NextResponse.json({ error: "Analysis failed to format correctly", details: e.message }, { status: 500 })
     }
 
-    if (evaluation.overall_score === undefined || !evaluation.recommendation) {
-      return NextResponse.json({ error: "Incomplete evaluation" }, { status: 500 })
+    // Defensive mapping for database
+    const finalScores = {
+      overall: evaluation.overall_score ?? 0,
+      comm:    evaluation.communication_score ?? evaluation.overall_score ?? 0,
+      tech:    evaluation.technical_knowledge_score ?? evaluation.overall_score ?? 0,
+      conf:    evaluation.confidence_score ?? evaluation.overall_score ?? 0,
+      solve:   evaluation.problem_solving_score ?? evaluation.overall_score ?? 0
     }
 
-    const rec = evaluation.recommendation?.toLowerCase()
-    const normalizedRec = rec === 'hire' ? 'Hire' : rec === 'reject' ? 'Reject' : 'Consider'
+    const rec = String(evaluation.recommendation || 'Consider').toLowerCase()
+    const normalizedRec = rec.includes('hire') ? 'Hire' : rec.includes('reject') ? 'Reject' : 'Consider'
     const qualStatus = normalizedRec === 'Hire' ? 'qualified' : normalizedRec === 'Reject' ? 'not_qualified' : 'pending'
 
     const { data, error: dbError } = await supabase
@@ -169,30 +177,30 @@ recommendation must be exactly: "Hire" (score>=75), "Consider" (50-74), or "Reje
       .insert({
         transcript_id:             transcriptId ?? null,
         interview_id:              interviewId  ?? "unknown",
-        candidate_name:            candidateName,
+        candidate_name:            candidateName || "Unknown",
         candidate_email:           candidateEmail ?? null,
         job_position:              jobPosition    ?? null,
-        overall_score:             evaluation.overall_score,
-        communication_score:       evaluation.communication_score,
-        technical_knowledge_score: evaluation.technical_knowledge_score,
-        confidence_score:          evaluation.confidence_score,
-        problem_solving_score:     evaluation.problem_solving_score,
+        overall_score:             finalScores.overall,
+        communication_score:       finalScores.comm,
+        technical_knowledge_score: finalScores.tech,
+        confidence_score:          finalScores.conf,
+        problem_solving_score:     finalScores.solve,
         recommendation:            normalizedRec,
-        recommendation_reason:     evaluation.recommendation_reason ?? null,
+        recommendation_reason:     evaluation.recommendation_reason ?? "Evaluation completed.",
         qualification_status:      qualStatus,
-        detailed_feedback:         evaluation.detailed_feedback,
-        overall_feedback:          evaluation.detailed_feedback,
-        strengths:                 evaluation.strengths   ?? [],
-        improvements:              evaluation.improvements ?? [],
+        detailed_feedback:         evaluation.detailed_feedback ?? "No detailed feedback provided.",
+        overall_feedback:          evaluation.detailed_feedback ?? "Evaluation complete.",
+        strengths:                 Array.isArray(evaluation.strengths) ? evaluation.strengths : [],
+        improvements:              Array.isArray(evaluation.improvements) ? evaluation.improvements : [],
         question_scores:           evaluation.star_analysis ?? evaluation.question_scores ?? [],
         category_scores: {
-          "Technical Skills": evaluation.technical_knowledge_score,
-          "Communication":    evaluation.communication_score,
-          "Confidence":        evaluation.confidence_score,
-          "Problem Solving":   evaluation.problem_solving_score,
+          "Technical Skills": finalScores.tech,
+          "Communication":    finalScores.comm,
+          "Confidence":        finalScores.conf,
+          "Problem Solving":   finalScores.solve,
           "Behavioral Notes":  evaluation.behavioral_summary ?? {}
         },
-        status:     'completed',
+        status:     isCompleted ? 'completed' : 'incomplete',
         email_sent: false,
       })
       .select().single()
