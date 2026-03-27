@@ -264,8 +264,12 @@ ${questions}`
   }
 
   const stopListening = () => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop()
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop()
+      } catch (e) {
+        console.warn('[Audio] Stop error:', e)
+      }
     }
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current)
@@ -274,10 +278,12 @@ ${questions}`
   }
 
   const processAudio = async () => {
-    if (audioChunksRef.current.length === 0) return
+    if (audioChunksRef.current.length === 0 || !callActiveRef.current) return
 
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
-    if (audioBlob.size < 1000) { // Too small, likely noise
+    audioChunksRef.current = [] // Clear for next round
+
+    if (audioBlob.size < 1500) { 
       if (callActiveRef.current && !isProcessingRef.current && !isSpeaking) {
         startListening()
       }
@@ -557,13 +563,37 @@ ${questions}`
   const toggleMute = () => {
     isMutedRef.current = !isMutedRef.current
     setIsMuted(isMutedRef.current)
+    
     if (isMutedRef.current) {
+      // Immediate silence
       window.speechSynthesis.cancel()
-      stopListening()
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        // Stop recording but prevent processAudio from submitting
+        mediaRecorderRef.current.onstop = null 
+        mediaRecorderRef.current.stop()
+        setIsRecording(false)
+      }
+      setStatusMsg('Microphone muted. Unmute to respond.')
     } else {
-      if (callActiveRef.current && !isSpeaking && !isProcessingRef.current) {
+      // Resume logic
+      if (callActiveRef.current && !isSpeaking && !isProcessingRef.current && !technicalMode) {
         startListening()
       }
+    }
+  }
+
+  // Support Tab key in technical editor
+  const handleEditorKeyDown = (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const start = e.target.selectionStart
+      const end = e.target.selectionEnd
+      const val = e.target.value
+      setCodeSnippet(val.substring(0, start) + '    ' + val.substring(end))
+      // Reset cursor position in next tick
+      setTimeout(() => {
+        e.target.selectionStart = e.target.selectionEnd = start + 4
+      }, 0)
     }
   }
 
@@ -833,6 +863,7 @@ ${questions}`
                 <Textarea 
                   value={codeSnippet}
                   onChange={(e) => setCodeSnippet(e.target.value)}
+                  onKeyDown={handleEditorKeyDown}
                   className="flex-1 bg-gray-900 border-none text-green-400 font-mono text-sm p-4 resize-none focus-visible:ring-0 leading-relaxed shadow-inner rounded-xl"
                   placeholder="Type your code here..."
                 />
